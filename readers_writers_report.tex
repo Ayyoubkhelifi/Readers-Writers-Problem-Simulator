@@ -210,7 +210,19 @@ class TrueFairRWLock(ReadWriteLock):
                     break
                 me.wait()
 \end{lstlisting}
-This structure ensures that no thread can "cut the line," preventing starvation for both readers and writers.
+\subsection{Adaptive Strategy (Aging)}
+We implemented an advanced "Adaptive" lock (also known as priority inheritance or aging). By default, it operates in \textbf{Reader Priority} to maximize throughput. However, if a Writer waits longer than a defined threshold ($T > 1.0s$), the system dynamically switches to \textbf{Strict Writer Priority} to prevent starvation.
+\begin{lstlisting}[language=Python]
+class AdaptiveRWLock(ReadWriteLock):
+    def start_read(self, thread_id):
+        while True:
+            # If Writer Starving -> Block new readers
+            if self.should_panic() and self.waiting_writers > 0:
+                 self.condition.wait()
+                 continue
+            # ... Normal logic ...
+\end{lstlisting}
+This hybrid approach empirically offers the highest performance while maintaining a hard guarantee against infinite blocking.
 
 \section{Thread Simulation}
 The \texttt{GenericWorker} class (extending \texttt{QThread}) simulates a thread's lifecycle:
