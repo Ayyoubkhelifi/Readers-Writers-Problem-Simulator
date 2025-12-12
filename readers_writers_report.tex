@@ -1,0 +1,258 @@
+\documentclass[a4paper,12pt]{report}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+
+% Geometric layout
+\geometry{
+    a4paper,
+    total={170mm,257mm},
+    left=20mm,
+    top=20mm,
+}
+
+% Code listing style
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% Structuring
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Readers-Writers Problem Report}
+\fancyhead[R]{\thepage}
+
+\begin{document}
+
+% --- TITLE PAGE ---
+\begin{titlepage}
+    \begin{center}
+        \vspace*{1cm}
+        
+        \Huge
+        \textbf{Advanced Operating Systems}
+        
+        \vspace{0.5cm}
+        \LARGE
+        AOS Project Report
+        
+        \vspace{1.5cm}
+        
+        \textbf{Simulation and Analysis of the Readers-Writers Problem}
+        
+        \vfill
+        
+        \textbf{Authors:} \\
+        Khelifi Ayyoub \\
+        Chaalal Djewed \\
+        
+        \vspace{0.8cm}
+        
+        \normalsize
+        Department of Computer Science \\
+        USTO \\
+        \today
+        
+    \end{center}
+\end{titlepage}
+
+% --- ABSTRACT ---
+\begin{abstract}
+This report examines the classical Readers-Writers problem in concurrent programming. We explore the synchronization requirements needed to maintain data integrity when multiple threads access shared resources. Three synchronization strategies are analyzed: Reader Priority, Writer Priority, and Fair (First-Come-First-Served). We present an implementation using Python's \texttt{threading} and \texttt{PyQt6} libraries that visualizes thread behavior under each strategy, demonstrating how they prevent race conditions and handle potential starvation scenarios.
+\end{abstract}
+
+\tableofcontents
+
+% --- CHAPTER 1: INTRO ---
+\chapter{Introduction}
+The Readers-Writers problem is a classic synchronization challenge in operating systems and database theory. It models a scenario where multiple threads need access to a shared resource like a database or file. These threads fall into two categories:
+\begin{itemize}
+    \item \textbf{Readers}: threads that only read data without modifying it. Multiple readers can safely access the resource at the same time.
+    \item \textbf{Writers}: threads that modify the data and require exclusive access. No other thread (reader or writer) can access the resource while a writer is active.
+\end{itemize}
+
+The main challenge is coordinating these accesses to prevent race conditions and data inconsistency, while also maximizing concurrency and avoiding starvation (where a thread waits indefinitely). This report presents a simulator that addresses these challenges through different synchronization policies.
+
+% --- CHAPTER 2: THEORETICAL ---
+\chapter{Background and Theory}
+\section{Problem Definition}
+Let $R$ represent the number of active readers and $W$ represent the number of active writers. The critical section must satisfy these constraints:
+\begin{equation}
+    |W| \le 1
+\end{equation}
+\begin{equation}
+    |W| = 1 \implies |R| = 0
+\end{equation}
+\begin{equation}
+    |R| > 0 \implies |W| = 0
+\end{equation}
+
+These constraints ensure mutual exclusion for writers while permitting concurrent reader access.
+
+\section{Synchronization Strategies}
+
+\subsection{Reader Priority}
+With reader priority, readers are never blocked unless a writer is currently using the shared resource. New readers can always join if other readers are active, even if writers are waiting.
+\begin{itemize}
+    \item \textbf{Advantage}: Maximizes read throughput.
+    \item \textbf{Drawback}: Writers can be starved if readers arrive frequently enough to keep the resource continuously occupied.
+\end{itemize}
+
+\subsection{Writer Priority}
+Under writer priority, once a writer requests access, no new readers can start reading. All waiting writers must complete before new readers are admitted.
+\begin{itemize}
+    \item \textbf{Advantage}: Ensures writers get timely access and data stays fresh.
+    \item \textbf{Drawback}: Readers can be starved if writers arrive frequently.
+\end{itemize}
+
+\subsection{Fair Strategy}
+The fair approach prevents starvation by serving all requests in First-In-First-Out order, regardless of thread type. Each thread waits only for those that arrived before it.
+\begin{itemize}
+    \item \textbf{Advantage}: No thread can be starved indefinitely.
+    \item \textbf{Drawback}: May reduce overall throughput compared to priority-based approaches.
+\end{itemize}
+
+% --- CHAPTER 3: IMPLEMENTATION ---
+\chapter{Implementation}
+Our solution is implemented in Python using the \texttt{threading} module for synchronization and \texttt{PyQt6} for the graphical interface.
+
+\section{Architecture}
+The implementation uses a class hierarchy built around \texttt{ReadWriteLock}, which defines the interface for lock operations.
+
+\subsection{Base Class: \texttt{ReadWriteLock}}
+This abstract class defines the locking interface:
+\begin{lstlisting}[language=Python]
+class ReadWriteLock:
+    def start_read(self, thread_id): pass
+    def end_read(self, thread_id): pass
+    def start_write(self, thread_id): pass
+    def end_write(self, thread_id): pass
+\end{lstlisting}
+
+\subsection{Reader Priority Implementation}
+This implementation uses \texttt{threading.Condition} variables. Readers wait only when a writer is actively using the resource:
+\begin{lstlisting}[language=Python]
+def start_read(self, thread_id):
+    with self.mutex:
+        # Wait only if a writer is active
+        while self.active_writers > 0:
+            self.readers_cond.wait()
+        self.active_readers += 1
+\end{lstlisting}
+Writers must wait for all active readers to finish before gaining access.
+
+\subsection{Writer Priority Implementation}
+To give writers priority, readers must wait if any writer is either active or waiting:
+\begin{lstlisting}[language=Python]
+def start_read(self, thread_id):
+    with self.mutex:
+        # Block if writers are active OR waiting
+        while self.active_writers > 0 or self.waiting_writers > 0:
+            self.readers_cond.wait()
+        self.active_readers += 1
+\end{lstlisting}
+The check for \texttt{waiting\_writers > 0} ensures queued writers get access before newly arriving readers.
+
+\subsection{Fair Strategy Implementation (True RW Lock)}
+The fair strategy is implemented in \texttt{TrueFairRWLock} using a FIFO queue to enforce strict ordering. This effectively solves the "Third Readers-Writers Problem."
+\begin{lstlisting}[language=Python]
+class TrueFairRWLock(ReadWriteLock):
+    def __init__(self):
+        self.queue = deque()  # Stores (thread_id, type, condition)
+
+    def start_read(self, thread_id):
+        with self.lock:
+            me = threading.Condition(self.lock)
+            self.queue.append((thread_id, 'R', me))
+            while True:
+                # Enter if no active writer AND I am at the head
+                # (or head is reader and I am a consecutive reader)
+                if self.can_enter_read(thread_id):
+                    self.queue.popleft()
+                    break
+                me.wait()
+\end{lstlisting}
+This structure ensures that no thread can "cut the line," preventing starvation for both readers and writers.
+
+\section{Thread Simulation}
+The \texttt{GenericWorker} class (extending \texttt{QThread}) simulates a thread's lifecycle:
+\begin{enumerate}
+    \item \textbf{Request}: Call \texttt{start\_read} or \texttt{start\_write} and measure wait time.
+    \item \textbf{Critical Section}: Simulate work with sleep and update shared data
+    \item \textbf{Release}: Call \texttt{end\_read} or \texttt{end\_write}
+\end{enumerate}
+
+% --- CHAPTER 4: RESULTS ---
+\chapter{Results and Analysis}
+The application provides real-time visualization of thread synchronization.
+
+\section{Interface Components}
+The interface consists of four main parts:
+\begin{enumerate}
+    \item \textbf{Control Panel}: Allows dynamic thread creation and strategy selection.
+    \item \textbf{Metrics Dashboard}: Displays real-time performance data:
+    \begin{itemize}
+        \item Average and Maximum Wait Times.
+        \item System Throughput (ops/sec).
+        \item Total serviced Readers vs Writers.
+    \end{itemize}
+    \item \textbf{Visualizer}: 
+    \begin{itemize}
+        \item Shows a central "Data" node.
+        \item Reader threads appear as orbiting nodes.
+        \item Writer threads overlay the center (exclusive access).
+    \end{itemize}
+    \item \textbf{Event Log}: A timestamped record of all operations.
+\end{enumerate}
+
+\section{Observed Behavior}
+Testing revealed the expected behavior for each strategy:
+\begin{itemize}
+    \item \textbf{Reader Priority}: Continuous addition of readers prevented writers from entering. \textbf{Metric observed}: Writer Max Wait Time increased indefinitely while Reader Wait Time remained low.
+    \item \textbf{Writer Priority}: Writers took precedence, blocking new readers immediately. \textbf{Metric observed}: Reader Max Wait Time spiked during write bursts.
+    \item \textbf{Fair Strategy (FIFO)}: Threads accessed the resource in strict arrival order. \textbf{Metric observed}: Wait times were distributed evenly relative to queue position; zero starvation occurred.
+\end{itemize}
+
+% --- CONCLUSION ---
+\chapter{Conclusion}
+The Readers-Writers problem highlights the inherent trade-offs between concurrency and fairness in system design. Our implementation successfully demonstrates these trade-offs through visualization. Reader Priority maximizes read concurrency but risks starving writers. Writer Priority ensures data freshness but can starve readers. The Fair strategy balances both concerns, making it suitable for systems where starvation is unacceptable. The simulation confirms that our Python lock implementations correctly enforce these behaviors using standard synchronization primitives.
+
+\end{document}
